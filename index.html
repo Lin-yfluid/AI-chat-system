@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 聊天系统</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  body { height: 100vh; display: flex; background-color: #ffffff; color: #333; overflow: hidden; }
+  button { cursor: pointer; border: none; outline: none; }
+
+  .sidebar { width: 260px; background-color: #f9f9f9; display: flex; flex-direction: column; border-right: 1px solid #eaeaea; }
+  .side-header { padding: 16px; }
+  .btn-new { width: 100%; padding: 12px; background-color: #ffffff; border: 1px solid #e5e5e5; border-radius: 8px; font-size: 14px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s; color: #333; }
+  .btn-new:hover { background-color: #f0f0f0; }
+  .conv-list { flex: 1; overflow-y: auto; padding: 10px; }
+  .conv-item { padding: 12px; border-radius: 8px; font-size: 14px; color: #333; cursor: pointer; display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; transition: 0.2s; }
+  .conv-item:hover { background-color: #eaeaea; }
+  .conv-item.active { background-color: #e5e5e5; font-weight: 500; }
+  .conv-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conv-ops { display: none; gap: 6px; }
+  .conv-item:hover .conv-ops { display: flex; }
+  .conv-ops span { font-size: 14px; opacity: 0.6; cursor: pointer; }
+  .conv-ops span:hover { opacity: 1; color: #d93025; }
+  .conv-ops span.edit:hover { color: #2e7d32; }
+  
+  .user-area { padding: 16px; border-top: 1px solid #eaeaea; display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: #ddd; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .user-info { flex: 1; overflow: hidden; }
+  .user-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .user-actions { display: flex; gap: 8px; }
+  .user-actions span { font-size: 14px; cursor: pointer; opacity: 0.7; }
+  .user-actions span:hover { opacity: 1; }
+
+  .main { flex: 1; display: flex; flex-direction: column; background-color: #ffffff; }
+  .topbar { padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eaeaea; }
+  .model-select { padding: 6px 12px; font-size: 14px; border: 1px solid #e5e5e5; border-radius: 6px; outline: none; }
+  .chat-container { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+  
+  .msg { display: flex; gap: 12px; max-width: 80%; }
+  .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  .msg .bubble { padding: 12px 16px; border-radius: 12px; font-size: 15px; line-height: 1.6; }
+  .msg.ai .bubble { background-color: #f4f6f8; color: #333; border-top-left-radius: 2px; }
+  .msg.user .bubble { background-color: #2e7d32; color: #fff; border-top-right-radius: 2px; }
+  .msg .bubble pre { background: #282c34; padding: 10px; border-radius: 8px; color: #fff; overflow-x: auto; margin: 8px 0; font-family: monospace; }
+  
+  .input-area { padding: 20px; border-top: 1px solid #eaeaea; background-color: #ffffff; }
+  .input-wrapper { max-width: 800px; margin: 0 auto; position: relative; }
+  #input-box { width: 100%; padding: 14px 50px 14px 16px; font-size: 15px; border: 1px solid #e5e5e5; border-radius: 12px; resize: none; outline: none; height: 54px; background-color: #f9f9f9; }
+  #input-box:focus { border-color: #2e7d32; background-color: #fff; }
+  #send-btn { position: absolute; right: 8px; top: 8px; width: 38px; height: 38px; border-radius: 8px; background-color: #2e7d32; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  #send-btn:hover { background-color: #1b5e20; }
+  #send-btn:disabled { background-color: #a5d6a7; cursor: not-allowed; }
+
+  .empty-tip { text-align: center; color: #888; margin-top: 15vh; }
+  .empty-tip h1 { font-size: 24px; color: #333; margin-bottom: 10px; }
+  
+  .typing { display: inline-flex; gap: 4px; padding: 4px; }
+  .typing span { width: 6px; height: 6px; background-color: #888; border-radius: 50%; animation: bounce 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay: 0.15s; }
+  .typing span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+
+  .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .modal-mask.show { display: flex; }
+  .modal { background: #fff; width: 400px; border-radius: 12px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+  .modal h3 { margin-bottom: 16px; font-size: 18px; }
+  .modal input, .modal textarea { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
+  .modal textarea { height: 100px; resize: none; }
+  .modal .row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+  .modal .btn-cancel { padding: 8px 16px; background: #f0f0f0; border-radius: 8px; color: #333; }
+  .modal .btn-save { padding: 8px 16px; background: #2e7d32; border-radius: 8px; color: #fff; }
+
+  #auth-view { position: fixed; inset: 0; background: #f9f9f9; display: flex; align-items: center; justify-content: center; z-index: 200; }
+  .auth-card { background: #fff; padding: 40px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); width: 360px; text-align: center; }
+  .auth-card h1 { font-size: 22px; margin-bottom: 20px; color: #2e7d32; }
+  .auth-card input { width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 8px; outline: none; }
+  .auth-card button { width: 100%; padding: 12px; background: #2e7d32; color: #fff; border-radius: 8px; font-size: 16px; margin-top: 10px; }
+  .auth-err { color: #d93025; font-size: 13px; margin-top: 10px; height: 16px; }
+</style>
+</head>
+<body>
+
+<div id="auth-view">
+  <div class="auth-card">
+    <h1>AI 聊天系统</h1>
+    <input id="auth-user" placeholder="用户名">
+    <input id="auth-pass" type="password" placeholder="密码">
+    <div class="auth-err" id="auth-err"></div>
+    <button onclick="doAuth()">登 录 / 注 册</button>
+  </div>
+</div>
+
+<div class="sidebar">
+  <div class="side-header">
+    <button class="btn-new" onclick="newConv()">＋ 新建对话</button>
+  </div>
+  <div class="conv-list" id="conv-list"></div>
+  <div class="user-area">
+    <div class="avatar" id="me-avatar">🙂</div>
+    <div class="user-info"><div class="user-name" id="me-nick">用户</div></div>
+    <div class="user-actions">
+      <span onclick="openModal('profile-modal')" title="设置">⚙️</span>
+      <span onclick="logout()" title="退出">🚪</span>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <select class="model-select" id="model-select">
+      <option value="local">本地 SFT 模型</option>
+      <option value="lora">本地 LoRA 模型</option>
+      <option value="cloud">云端 DeepSeek 模型</option>
+    </select>
+    <button class="btn-ghost" onclick="openModal('sys-modal')" style="padding: 6px 12px; border:1px solid #ddd; border-radius: 6px; background: #fff;">🎭 角色设定</button>
+  </div>
+  
+  <div class="chat-container" id="chat">
+    <div class="empty-tip"><h1>你好！</h1><p>新建对话开始聊天吧。</p></div>
+  </div>
+
+  <div class="input-area">
+    <div class="input-wrapper">
+      <textarea id="input-box" placeholder="输入你的问题… (Enter 发送)"></textarea>
+      <button id="send-btn" onclick="send()">➤</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask" id="profile-modal">
+  <div class="modal">
+    <h3>个人资料</h3>
+    <input id="nick-input" placeholder="昵称">
+    <input id="avatar-input" placeholder="头像 (emoji，如 🦊)">
+    <input id="apikey-input" placeholder="云端 DeepSeek API Key (sk-...)">
+    <div class="row">
+      <button class="btn-cancel" onclick="closeModal('profile-modal')">取消</button>
+      <button class="btn-save" onclick="saveProfile()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask" id="sys-modal">
+  <div class="modal">
+    <h3>角色设定 (System Prompt)</h3>
+    <textarea id="sys-input" placeholder="例如：你是一个严格的编程导师，只回答 Python 相关问题..."></textarea>
+    <div class="row">
+      <button class="btn-cancel" onclick="closeModal('sys-modal')">取消</button>
+      <button class="btn-save" onclick="saveSysPrompt()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let TOKEN = localStorage.getItem("token") || "";
+let ME = null;
+let convs = [];
+let currentConv = null;
+
+async function api(path, opts = {}) {
+  opts.headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+  if (TOKEN) opts.headers["Authorization"] = "Bearer " + TOKEN;
+  const res = await fetch(path, opts);
+  if (res.status === 401) { logout(); throw new Error("登录已过期"); }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "请求失败");
+  return data;
+}
+
+async function doAuth() {
+  const u = document.getElementById("auth-user").value.trim();
+  const p = document.getElementById("auth-pass").value;
+  const err = document.getElementById("auth-err");
+  err.textContent = "";
+  if(!u || !p) { err.textContent = "账号密码不能为空"; return; }
+  try {
+    let data;
+    try {
+      data = await api("/api/auth/login", { method: "POST", body: JSON.stringify({ username: u, password: p }) });
+    } catch(e) {
+      await api("/api/auth/register", { method: "POST", body: JSON.stringify({ username: u, password: p }) });
+      data = await api("/api/auth/login", { method: "POST", body: JSON.stringify({ username: u, password: p }) });
+    }
+    TOKEN = data.token;
+    localStorage.setItem("token", TOKEN);
+    ME = data.user;
+    document.getElementById("auth-view").style.display = "none";
+    initApp();
+  } catch (e) { err.textContent = e.message; }
+}
+
+function logout() {
+  TOKEN = ""; ME = null;
+  localStorage.removeItem("token");
+  document.getElementById("auth-view").style.display = "flex";
+}
+
+async function initApp() {
+  document.getElementById("me-avatar").textContent = ME.avatar || "🙂";
+  document.getElementById("me-nick").textContent = ME.nickname || ME.username;
+  await loadConvs();
+}
+
+async function loadConvs() {
+  const data = await api("/api/conversations");
+  convs = data.conversations;
+  const list = document.getElementById("conv-list");
+  list.innerHTML = "";
+  convs.forEach(c => {
+    const div = document.createElement("div");
+    div.className = "conv-item" + (currentConv && currentConv.id === c.id ? " active" : "");
+    div.innerHTML = `<span class="conv-title">${c.title}</span>
+      <span class="conv-ops">
+        <span class="edit" onclick="renameConv(event, '${c.id}')">✏️</span>
+        <span onclick="delConv(event, '${c.id}')">🗑</span>
+      </span>`;
+    div.onclick = () => selectConv(c.id);
+    list.appendChild(div);
+  });
+}
+
+async function newConv() {
+  const currentModel = document.getElementById("model-select").value;
+  const data = await api("/api/conversations", { method: "POST", body: JSON.stringify({ title: "新对话", model: currentModel }) });
+  currentConv = data.conversation;
+  await loadConvs();
+  document.getElementById("chat").innerHTML = `<div class="empty-tip"><h1>新对话</h1><p>请输入你的问题。</p></div>`;
+}
+
+async function selectConv(id) {
+  currentConv = convs.find(x => x.id === id);
+  if (!currentConv) return;
+  document.getElementById("model-select").value = currentConv.model || "local";
+  const data = await api(`/api/conversations/${id}/messages`);
+  renderMessages(data.messages);
+  loadConvs();
+}
+
+async function renameConv(e, id) {
+  e.stopPropagation();
+  const c = convs.find(x => x.id === id);
+  const newTitle = prompt("请输入新的对话名称：", c.title);
+  if (newTitle && newTitle.trim()) {
+    await api(`/api/conversations/${id}`, { method: "PUT", body: JSON.stringify({ title: newTitle.trim() }) });
+    await loadConvs();
+  }
+}
+
+async function delConv(e, id) {
+  e.stopPropagation();
+  if (!confirm("确定删除吗？")) return;
+  await api(`/api/conversations/${id}`, { method: "DELETE" });
+  if (currentConv && currentConv.id === id) currentConv = null;
+  await loadConvs();
+}
+
+function renderMessages(msgs) {
+  const chat = document.getElementById("chat");
+  chat.innerHTML = "";
+  if(msgs.length === 0) {
+    chat.innerHTML = `<div class="empty-tip"><h1>空对话</h1><p>开始提问吧！</p></div>`;
+    return;
+  }
+  msgs.forEach(m => {
+    const isUser = m.role === "user";
+    const div = document.createElement("div");
+    div.className = `msg ${isUser ? "user" : "ai"}`;
+    const content = isUser ? m.content : marked.parse(m.content);
+    div.innerHTML = `<div class="avatar">${isUser ? (ME.avatar || "🧑") : "🤖"}</div><div class="bubble">${content}</div>`;
+    chat.appendChild(div);
+  });
+  chat.scrollTop = chat.scrollHeight;
+}
+
+async function send() {
+  const input = document.getElementById("input-box");
+  const text = input.value.trim();
+  if (!text) return;
+  if (!currentConv) await newConv();
+
+  input.value = "";
+  document.getElementById("send-btn").disabled = true;
+  
+  const chat = document.getElementById("chat");
+  document.querySelector(".empty-tip")?.remove();
+  
+  chat.innerHTML += `<div class="msg user"><div class="avatar">${ME.avatar || "🧑"}</div><div class="bubble">${text}</div></div>`;
+  const aiDiv = document.createElement("div");
+  aiDiv.className = "msg ai";
+  aiDiv.innerHTML = `<div class="avatar">🤖</div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  chat.appendChild(aiDiv);
+  chat.scrollTop = chat.scrollHeight;
+
+  const currentModel = document.getElementById("model-select").value;
+
+  try {
+    const data = await api("/api/chat", { method: "POST", body: JSON.stringify({ 
+      conversation_id: currentConv.id, message: text, model: currentModel, max_new_tokens: 1024 
+    }) });
+    aiDiv.querySelector(".bubble").innerHTML = marked.parse(data.reply);
+    chat.scrollTop = chat.scrollHeight;
+  } catch (e) {
+    aiDiv.querySelector(".bubble").innerHTML = `<span style="color:red">⚠️ ${e.message}</span>`;
+  } finally {
+    document.getElementById("send-btn").disabled = false;
+    input.focus();
+    loadConvs(); 
+  }
+}
+
+document.getElementById("input-box").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+function openModal(id) { 
+  document.getElementById(id).classList.add("show");
+  // 如果是打开个人资料，回填当前昵称、头像
+  if (id === 'profile-modal') {
+    document.getElementById("nick-input").value = ME.nickname || "";
+    document.getElementById("avatar-input").value = ME.avatar || "";
+  }
+}
+function closeModal(id) { document.getElementById(id).classList.remove("show"); }
+
+async function saveProfile() {
+  const nickname = document.getElementById("nick-input").value.trim();
+  const avatar = document.getElementById("avatar-input").value.trim();
+  const api_key = document.getElementById("apikey-input").value.trim();
+  const data = await api("/api/profile", { method: "PUT", body: JSON.stringify({ nickname, avatar, api_key }) });
+  ME = data.user;
+  document.getElementById("me-avatar").textContent = ME.avatar;
+  document.getElementById("me-nick").textContent = ME.nickname;
+  closeModal('profile-modal');
+}
+
+async function saveSysPrompt() {
+  if(!currentConv) return alert("请先新建对话！");
+  const prompt = document.getElementById("sys-input").value;
+  await api(`/api/conversations/${currentConv.id}`, { method: "PUT", body: JSON.stringify({ system_prompt: prompt }) });
+  closeModal('sys-modal');
+}
+
+(async () => {
+  if (TOKEN) {
+    try {
+      const data = await api("/api/auth/me");
+      ME = data.user;
+      document.getElementById("auth-view").style.display = "none";
+      initApp();
+    } catch (e) { logout(); }
+  }
+})();
+</script>
+</body>
+</html>
